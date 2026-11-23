@@ -1,0 +1,220 @@
+import type { Permission } from "@/lib/roles";
+
+export type FinanceModuleStatus = "active" | "partial";
+
+export type FinanceModuleGroup = "ringkasan" | "transaksi" | "akuntansi" | "laporan" | "penggajian" | "pengaturan";
+
+export const FINANCE_GROUP_LABELS: Record<FinanceModuleGroup, string> = {
+  ringkasan: "Ringkasan",
+  transaksi: "Transaksi",
+  akuntansi: "Akuntansi",
+  laporan: "Laporan",
+  penggajian: "Penggajian",
+  pengaturan: "Pengaturan",
+};
+
+export type FinanceModule = {
+  slug: string;
+  label: string;
+  description: string;
+  href: string;
+  group: FinanceModuleGroup;
+  permission: Permission;
+  anyOf?: Permission[];
+  status: FinanceModuleStatus;
+};
+
+export const FINANCE_MODULES: FinanceModule[] = [
+  {
+    slug: "dashboard",
+    label: "Dashboard Keuangan",
+    description: "Ringkasan pengajuan dana, laba rugi, dan modul keuangan",
+    href: "/dashboard/keuangan",
+    group: "ringkasan",
+    permission: "finance:view",
+    anyOf: ["finance:view", "payroll:view"],
+    status: "active",
+  },
+  {
+    slug: "pengajuan",
+    label: "Pengajuan Dana",
+    description: "Buat, approval, pembayaran, dan realisasi pengajuan dana",
+    href: "/dashboard/keuangan/pengajuan",
+    group: "transaksi",
+    permission: "finance:view",
+    anyOf: ["finance:view", "finance:submit", "finance:approve"],
+    status: "active",
+  },
+  {
+    slug: "pendapatan",
+    label: "Pendapatan",
+    description: "Input pendapatan manual, dari invoice, dan POS",
+    href: "/dashboard/keuangan/pendapatan",
+    group: "transaksi",
+    permission: "finance:submit",
+    status: "active",
+  },
+  {
+    slug: "invoice",
+    label: "Invoice / Kwitansi",
+    description: "Invoice, Pengajuan Dana & Kwitansi — PDF & sync pendapatan",
+    href: "/dashboard/keuangan/invoice",
+    group: "transaksi",
+    permission: "finance:view",
+    anyOf: ["finance:view", "finance:submit"],
+    status: "active",
+  },
+  {
+    slug: "pos",
+    label: "POS LBB",
+    description: "Import penjualan dan pengeluaran POS",
+    href: "/dashboard/keuangan/pos",
+    group: "transaksi",
+    permission: "finance:view",
+    status: "active",
+  },
+  {
+    slug: "coa",
+    label: "Master COA",
+    description: "Daftar kode akun (Chart of Accounts) 100–599",
+    href: "/dashboard/keuangan/akuntansi/coa",
+    group: "akuntansi",
+    permission: "finance:view",
+    status: "active",
+  },
+  {
+    slug: "jurnal",
+    label: "Jurnal Umum",
+    description: "Semua jurnal otomatis + jurnal manual, saldo awal, penyesuaian",
+    href: "/dashboard/keuangan/akuntansi/jurnal",
+    group: "akuntansi",
+    permission: "finance:view",
+    status: "active",
+  },
+  {
+    slug: "buku-besar",
+    label: "Buku Besar",
+    description: "Mutasi dan saldo berjalan per akun",
+    href: "/dashboard/keuangan/akuntansi/buku-besar",
+    group: "akuntansi",
+    permission: "finance:view",
+    status: "active",
+  },
+  {
+    slug: "penyusutan",
+    label: "Aset Tetap & Penyusutan",
+    description: "Harga perolehan aset & jurnal penyusutan otomatis bulanan",
+    href: "/dashboard/keuangan/akuntansi/penyusutan",
+    group: "akuntansi",
+    permission: "finance:view",
+    status: "active",
+  },
+  {
+    slug: "anggaran",
+    label: "Anggaran",
+    description: "Target pendapatan & batas beban per akun per bulan",
+    href: "/dashboard/keuangan/akuntansi/anggaran",
+    group: "akuntansi",
+    permission: "finance:view",
+    status: "active",
+  },
+  {
+    slug: "tutup-buku",
+    label: "Tutup Buku",
+    description: "Kunci periode yang sudah final",
+    href: "/dashboard/keuangan/akuntansi/tutup-buku",
+    group: "akuntansi",
+    permission: "finance:view",
+    status: "active",
+  },
+  {
+    slug: "neraca-saldo",
+    label: "Neraca Saldo",
+    description: "Total debit, kredit, dan saldo seluruh akun",
+    href: "/dashboard/keuangan/laporan/neraca-saldo",
+    group: "laporan",
+    permission: "finance:view",
+    status: "active",
+  },
+  {
+    slug: "laba-rugi",
+    label: "Laba Rugi",
+    description: "Pendapatan dikurangi beban per periode",
+    href: "/dashboard/keuangan/laporan/laba-rugi",
+    group: "laporan",
+    permission: "finance:view",
+    status: "active",
+  },
+  {
+    slug: "neraca",
+    label: "Neraca",
+    description: "Posisi aset, kewajiban, dan ekuitas",
+    href: "/dashboard/keuangan/laporan/neraca",
+    group: "laporan",
+    permission: "finance:view",
+    status: "active",
+  },
+  {
+    slug: "arus-kas",
+    label: "Arus Kas",
+    description: "Penerimaan & pengeluaran kas/bank dari jurnal (operasional, investasi, pendanaan)",
+    href: "/dashboard/keuangan/laporan/arus-kas",
+    group: "laporan",
+    permission: "finance:view",
+    status: "active",
+  },
+  {
+    slug: "umur-piutang",
+    label: "Umur Piutang",
+    description: "Invoice belum lunas per klien & lama keterlambatan",
+    href: "/dashboard/keuangan/laporan/umur-piutang",
+    group: "laporan",
+    permission: "finance:view",
+    status: "active",
+  },
+  {
+    slug: "anggaran-realisasi",
+    label: "Anggaran vs Realisasi",
+    description: "Perbandingan anggaran dengan realisasi per akun",
+    href: "/dashboard/keuangan/laporan/anggaran",
+    group: "laporan",
+    permission: "finance:view",
+    status: "active",
+  },
+  {
+    slug: "cashflow",
+    label: "Cash Flow (lama)",
+    description: "Ringkasan pengajuan & pendapatan periode 26–25 (sebelum jurnal)",
+    href: "/dashboard/keuangan/cashflow",
+    group: "laporan",
+    permission: "finance:view",
+    status: "active",
+  },
+  {
+    slug: "payroll",
+    label: "Payroll",
+    description: "Perhitungan gaji periode 26–25 dan posting ke keuangan",
+    href: "/dashboard/payroll",
+    group: "penggajian",
+    permission: "payroll:view",
+    status: "active",
+  },
+  {
+    slug: "slip-gaji",
+    label: "Slip Gaji",
+    description: "Slip gaji per karyawan per periode",
+    href: "/dashboard/hr/slip-gaji",
+    group: "penggajian",
+    permission: "payroll:view",
+    status: "active",
+  },
+  {
+    slug: "sync",
+    label: "Google Sync",
+    description: "Sinkronisasi cash flow ke Google Apps Script",
+    href: "/dashboard/keuangan/sync",
+    group: "pengaturan",
+    permission: "finance:view",
+    status: "active",
+  },
+];

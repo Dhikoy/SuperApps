@@ -1,0 +1,1104 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  DIREKSI
+  HRD
+  KEUANGAN
+  LEAD
+  STAFF
+  IT
+}
+
+enum ApprovalStatus {
+  PENDING
+  ATASAN_APPROVED
+  APPROVED
+  REJECTED
+}
+
+enum TaskStatus {
+  BELUM_MULAI
+  PROSES
+  ON_REVIEW
+  ON_PROSES
+  DONE
+}
+
+enum AttendanceStatus {
+  HADIR
+  TERLAMBAT
+  IZIN
+  ALPHA
+}
+
+enum AttendanceIssueReviewStatus {
+  BELUM_DIKONFIRMASI
+  DIPANTAU
+  SELESAI
+}
+
+enum PayrollCalculationMode {
+  HOURLY
+  DAILY
+}
+
+enum OvertimeType {
+  WEEKDAY
+  HOLIDAY
+}
+
+enum FundRequestStatus {
+  PENDING
+  APPROVED
+  PAID
+  REALIZED
+  REJECTED
+}
+
+enum IncomeSource {
+  MANUAL
+  POS
+  FUND_REALIZED
+}
+
+enum FinanceDocType {
+  INVOICE
+  FUND_REQUEST
+  RECEIPT
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  CANCELLED
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CASH
+  E_WALLET
+  ATM
+}
+
+enum PosTransactionType {
+  SALE
+  EXPENSE
+}
+
+enum RecruitmentStatus {
+  OPEN
+  INTERVIEW
+  OFFER
+  HIRED
+  REJECTED
+  CLOSED
+}
+
+enum ExitStatus {
+  PENDING
+  APPROVED
+  CLEARANCE
+  COMPLETED
+}
+
+enum ContractType {
+  PKWT
+  PKWTT
+  MAGANG
+}
+
+model User {
+  nik           String         @id
+  userId        String         @unique
+  name          String
+  password      String
+  role          Role           @default(STAFF)
+  company       String?
+  jobTitle      String?
+  birthDate     DateTime?
+  joinDate      DateTime?
+  bankAccount   String?
+  homeAddress   String?
+  flexibleAttendance Boolean @default(false)
+  mustChangePassword Boolean @default(false)
+  supervisorId  String?
+  departmentId  String?
+  jobGradeId    String?
+  supervisor    User?          @relation("Supervision", fields: [supervisorId], references: [nik])
+  subordinates  User[]         @relation("Supervision")
+  department    Department?    @relation(fields: [departmentId], references: [id])
+  jobGrade      JobGrade?      @relation(fields: [jobGradeId], references: [id])
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  assets        Asset[]
+  transfersFrom AssetTransfer[] @relation("TransferFromUser")
+  transfersTo   AssetTransfer[] @relation("TransferToUser")
+  transfersCreated AssetTransfer[] @relation("TransferCreatedBy")
+  assetLoans    AssetLoan[]    @relation("AssetLoanBorrower")
+  assetLoansCreated AssetLoan[] @relation("AssetLoanCreatedBy")
+  leaveRequests LeaveRequest[]
+  attendances   Attendance[]
+  attendanceCorrections AttendanceCorrection[]
+  tasks         Task[]         @relation("TaskAssignee")
+  taskProgressLogs TaskProgress[] @relation("TaskProgressAuthor")
+  salaries      UserSalary[]
+  payrollAdjustments PayrollAdjustment[]
+  overtimes     Overtime[]
+  fundRequests  FundRequest[]
+  incomeEntries IncomeEntry[]
+  invoices           Invoice[]
+  momNotes           MomNote[]
+  penalties          EmployeePenalty[] @relation("PenaltyEmployee")
+  penaltiesCreated   EmployeePenalty[] @relation("PenaltyCreatedBy")
+  penaltiesUpdated   EmployeePenalty[] @relation("PenaltyUpdatedBy")
+  onboardingTasks    OnboardingTask[]
+  contracts          EmploymentContract[]
+  businessTrips      BusinessTrip[]
+  performanceReviews PerformanceReview[]
+  bpjsEnrollment     BpjsEnrollment?
+  pph21Profile       Pph21Profile?
+  exitRequests       ExitRequest[]
+  officeLocationId   String?
+  officeLocation     OfficeLocation? @relation(fields: [officeLocationId], references: [id])
+  workScheduleId     String?
+  workSchedule       WorkSchedule?   @relation(fields: [workScheduleId], references: [id])
+  telegramChatId     String?         @unique
+  telegramUsername   String?
+  telegramLinkedAt   DateTime?
+  telegramLinkCodes  TelegramLinkCode[]
+  telegramReminders  TelegramReminderLog[]
+  attendanceIssueReviews AttendanceIssueReview[] @relation("AttendanceIssueEmployee")
+}
+
+model TelegramLinkCode {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [nik], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model TelegramClockSession {
+  id        String   @id @default(cuid())
+  chatId    String   @unique
+  action    String
+  step      String   @default("location")
+  jamKerjaId String?
+  latitude  Float?
+  longitude Float?
+  expiresAt DateTime
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+model TelegramBotSession {
+  id        String   @id @default(cuid())
+  chatId    String   @unique
+  flow      String
+  step      String
+  payload   String   @default("{}")
+  expiresAt DateTime
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+model TelegramReminderLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [nik], onDelete: Cascade)
+  dateKey   String
+  kind      String
+  sentAt    DateTime @default(now())
+
+  @@unique([userId, dateKey, kind])
+  @@index([dateKey])
+}
+
+model Asset {
+  id            String   @id @default(cuid())
+  laptop        String
+  serialNumber  String   @unique
+  condition     String
+  warehouse     String
+  specification String?
+  quantity      Int      @default(1)
+  category      String?
+  usageNote     String?
+  photoPath     String?
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [nik])
+  transfers     AssetTransfer[]
+  loanItems     AssetLoanItem[]
+  /// Data aset tetap untuk penyusutan (opsional)
+  company          String?
+  acquisitionCost  Float?
+  acquisitionDate  DateTime?
+  usefulLifeMonths Int?
+  residualValue    Float    @default(0)
+  /// Akun aset tetap (kode COA 131–141, 164–167)
+  assetAccount     String?
+  createdAt     DateTime @default(now())
+}
+
+/// Surat penyerahan & pemegangan barang inventaris.
+/// PENDING sampai HR mengunggah form bertanda tangan, lalu ACTIVE; RETURNED setelah barang kembali.
+model AssetLoan {
+  id             String          @id @default(cuid())
+  number         String          @unique
+  borrowerId     String
+  borrower       User            @relation("AssetLoanBorrower", fields: [borrowerId], references: [nik])
+  borrowerName   String
+  jobTitle       String?
+  homeAddress    String?
+  contact        String?
+  hrName         String
+  directorName   String
+  status         String          @default("PENDING")
+  signedPath     String?
+  signedAt       DateTime?
+  signedBy       String?
+  returnedAt     DateTime?
+  returnedBy     String?
+  returnNote     String?
+  createdById    String
+  createdBy      User            @relation("AssetLoanCreatedBy", fields: [createdById], references: [nik])
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  items          AssetLoanItem[]
+
+  @@index([status])
+  @@index([borrowerId])
+}
+
+model AssetLoanItem {
+  id            String    @id @default(cuid())
+  loanId        String
+  loan          AssetLoan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  assetId       String
+  asset         Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assetName     String
+  serialNumber  String
+  specification String?
+  sortOrder     Int       @default(0)
+  /// Lokasi & pemegang sebelum dipinjam, dipulihkan saat barang dikembalikan
+  previousWarehouse String?
+  previousUserId    String?
+
+  @@index([loanId])
+  @@index([assetId])
+}
+
+model AssetTransfer {
+  id           String    @id @default(cuid())
+  assetId      String
+  asset        Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assetName    String
+  serialNumber String
+  condition    String
+  fromLocation String
+  fromUserId   String?
+  fromUser     User?     @relation("TransferFromUser", fields: [fromUserId], references: [nik], onDelete: SetNull)
+  toUserId     String
+  toUser       User      @relation("TransferToUser", fields: [toUserId], references: [nik])
+  toLocation   String
+  status       String    @default("pending")
+  signedPath   String?
+  createdById  String
+  createdBy    User      @relation("TransferCreatedBy", fields: [createdById], references: [nik])
+  createdAt    DateTime  @default(now())
+  completedAt  DateTime?
+
+  @@index([assetId])
+  @@index([status])
+}
+
+model LeaveRequest {
+  id                 String         @id @default(cuid())
+  userId             String
+  user               User           @relation(fields: [userId], references: [nik])
+  leaveType          String
+  startDate          DateTime
+  endDate            DateTime
+  remarks            String?
+  documentAttachment String?
+  approvalStatus     ApprovalStatus @default(PENDING)
+  atasanApprovedBy   String?
+  atasanApprovedAt   DateTime?
+  hrdApprovedBy      String?
+  hrdApprovedAt      DateTime?
+  approvedBy         String?
+  approvedAt         DateTime?
+  createdAt          DateTime       @default(now())
+}
+
+model LeaveType {
+  id             String  @id @default(cuid())
+  name           String  @unique
+  requiresAtasan Boolean @default(true)
+  isActive       Boolean @default(true)
+  sortOrder      Int     @default(0)
+}
+
+model Company {
+  code        String   @id
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model OfficeLocation {
+  id           String  @id @default(cuid())
+  name         String
+  address      String?
+  latitude     Float
+  longitude    Float
+  radiusMeters Int     @default(100)
+  isActive     Boolean @default(true)
+  users        User[]
+  companyConfigs CompanyPresensiConfig[]
+}
+
+model CompanyPresensiConfig {
+  company            String          @id
+  officeLocationId   String?
+  officeLocation     OfficeLocation? @relation(fields: [officeLocationId], references: [id])
+  workScheduleId     String?
+  workSchedule       WorkSchedule?   @relation(fields: [workScheduleId], references: [id])
+  workDaysPerMonth   Int             @default(22)
+  /** JSON array of WorkSchedule IDs — jika 2+ shift, karyawan pilih saat clock in */
+  shiftOptions       String?
+}
+
+model WorkSchedule {
+  id               String       @id @default(cuid())
+  shiftName        String
+  standardClockIn  String
+  standardClockOut String
+  isActive         Boolean      @default(true)
+  attendances      Attendance[]
+  users            User[]
+  companyConfigs   CompanyPresensiConfig[]
+}
+
+model Attendance {
+  id           String           @id @default(cuid())
+  userId       String
+  user         User             @relation(fields: [userId], references: [nik])
+  jamKerjaId   String?
+  jamKerja     WorkSchedule?    @relation(fields: [jamKerjaId], references: [id])
+  date         DateTime
+  clockInTime  String?
+  clockOutTime String?
+  selfieImage  String?
+  clockOutSelfieImage String?
+  latitude     Float?
+  longitude    Float?
+  clockOutLatitude    Float?
+  clockOutLongitude   Float?
+  status       AttendanceStatus @default(HADIR)
+  tasks        Task[]
+  corrections  AttendanceCorrection[]
+  createdAt    DateTime         @default(now())
+
+  @@unique([userId, date])
+}
+
+model AttendanceCorrection {
+  id                 String         @id @default(cuid())
+  userId             String
+  user               User           @relation(fields: [userId], references: [nik], onDelete: Cascade)
+  attendanceId       String?
+  attendance         Attendance?    @relation(fields: [attendanceId], references: [id])
+  date               DateTime
+  requestedClockIn   String?
+  requestedClockOut  String?
+  reason             String
+  approvalStatus     ApprovalStatus @default(PENDING)
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  createdAt          DateTime       @default(now())
+
+  @@index([userId, date])
+  @@index([approvalStatus])
+}
+
+model AttendanceIssueReview {
+  id             String                      @id @default(cuid())
+  period         String
+  userId         String
+  user           User                        @relation("AttendanceIssueEmployee", fields: [userId], references: [nik], onDelete: Cascade)
+  confirmedCause String?
+  notes          String?
+  followUp       String?
+  status         AttendanceIssueReviewStatus @default(BELUM_DIKONFIRMASI)
+  reviewerNik    String?
+  reviewedAt     DateTime?
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+
+  @@unique([period, userId])
+  @@index([period, status])
+  @@index([userId])
+}
+
+model PayrollPolicy {
+  company            String                 @id
+  standardWorkDays   Int
+  salaryDivisor      Int
+  calculationMode    PayrollCalculationMode
+  overtimeWeekday    Float?
+  overtimeHoliday    Float?
+  useNationalHoliday Boolean                @default(false)
+  workDaysPattern    String
+  description        String?
+}
+
+model UserSalary {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [nik])
+  gajiPokok     Float
+  effectiveFrom DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// Komponen gaji bulanan di luar gaji pokok & lembur (diisi HR/Keuangan per periode)
+model PayrollAdjustment {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [nik], onDelete: Cascade)
+  year          Int
+  month         Int
+  allowance     Float    @default(0)
+  mealAllowance Float    @default(0)
+  deduction     Float    @default(0)
+  note          String?
+  updatedBy     String?
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, year, month])
+  @@index([year, month])
+}
+
+model PublicHoliday {
+  id   String   @id @default(cuid())
+  date DateTime @unique
+  name String
+}
+
+model Overtime {
+  id             String         @id @default(cuid())
+  userId         String
+  user           User           @relation(fields: [userId], references: [nik])
+  date           DateTime
+  hours          Float
+  type           OvertimeType
+  startTime      String?
+  endTime        String?
+  description    String?
+  approvalStatus ApprovalStatus @default(PENDING)
+  approvedBy     String?
+  approvedAt     DateTime?
+  remarks        String?
+  createdAt      DateTime       @default(now())
+
+  @@index([userId, date])
+}
+
+model FundRequest {
+  id              String            @id @default(cuid())
+  title           String
+  company         String
+  description     String?
+  totalAmount     Float
+  status          FundRequestStatus @default(PENDING)
+  submittedBy     String
+  submitter       User              @relation(fields: [submittedBy], references: [nik])
+  approvedBy      String?
+  approvedAt      DateTime?
+  paidBy          String?
+  paidAt          DateTime?
+  paymentRef      String?
+  paymentProof    String?
+  realizedBy      String?
+  realizedAt      DateTime?
+  realizationNote String?
+  /// Kas/Bank sumber pembayaran (kode COA)
+  paidFromAccount String?
+  /// Nominal aktual saat realisasi; null = sama dengan totalAmount
+  realizedAmount  Float?
+  items           FundRequestItem[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([status])
+  @@index([company])
+}
+
+model FundRequestItem {
+  id            String      @id @default(cuid())
+  fundRequestId String
+  fundRequest   FundRequest @relation(fields: [fundRequestId], references: [id], onDelete: Cascade)
+  itemName      String
+  quantity      Float
+  unit          String?
+  unitPrice     Float
+  subtotal      Float
+  /// Akun beban (kode COA)
+  accountCode   String?
+}
+
+model IncomeEntry {
+  id        String       @id @default(cuid())
+  title     String
+  company   String
+  amount    Float
+  source    IncomeSource @default(MANUAL)
+  entryDate DateTime
+  remarks   String?
+  /// Akun pendapatan (kode COA)
+  accountCode      String?
+  /// Kas/Bank penerima (kode COA)
+  cashAccount      String?
+  posTransactionId String?  @unique
+  createdBy String
+  creator   User         @relation(fields: [createdBy], references: [nik])
+  createdAt DateTime     @default(now())
+
+  @@index([entryDate])
+  @@index([company])
+}
+
+/// Dokumen keuangan: Invoice / Pengajuan Dana / Kwitansi (spek Detailing Invoice)
+model Invoice {
+  id                  String         @id @default(cuid())
+  docType             FinanceDocType @default(INVOICE)
+  invoiceNumber       String         @unique
+  company             String
+  companyFullName     String?
+  customerName        String?
+  customerAddress     String?
+  receivedFrom        String?
+  paymentFor          String?
+  subject             String?
+  issueDate           DateTime
+  dueDate             DateTime?
+  status              InvoiceStatus  @default(DRAFT)
+  subtotal            Float          @default(0)
+  taxAmount           Float          @default(0)
+  totalAmount         Float          @default(0)
+  amountInWords       String?
+  notes               String?
+  paymentMethod       PaymentMethod?
+  paymentSource       String?
+  paymentDestination  String?
+  preparedByName      String         @default("Reyvika")
+  preparedByTitle     String         @default("Admin Finance")
+  approvedByName      String         @default("Handayani")
+  approvedByTitle     String         @default("Head Of Finance")
+  /// Akun pendapatan untuk jurnal piutang (kode COA)
+  accountCode         String?
+  syncedIncomeId      String?
+  syncedAt            DateTime?
+  createdBy           String
+  creator             User           @relation(fields: [createdBy], references: [nik])
+  items               InvoiceItem[]
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  @@index([company])
+  @@index([docType])
+  @@index([status])
+  @@index([issueDate])
+}
+
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Float
+  unit        String?
+  unitPrice   Float
+  subtotal    Float
+  sortOrder   Int     @default(0)
+}
+
+model PosTransaction {
+  id              String             @id @default(cuid())
+  company         String             @default("LBB")
+  /// Outlet asal (mis. BMCG, PETIK); null = input manual
+  outlet          String?
+  type            PosTransactionType
+  amount          Float
+  description     String?
+  transactionDate DateTime
+  externalRef     String?            @unique
+  /// Akun pendapatan (SALE) atau beban (EXPENSE)
+  accountCode     String?
+  /// Kas/Bank (kode COA)
+  cashAccount     String?
+  createdAt       DateTime           @default(now())
+
+  @@index([transactionDate])
+  @@index([company])
+  @@index([outlet])
+}
+
+/// Struk penjualan per transaksi dari aplikasi POS outlet (dasar rekap harian PosTransaction)
+model PosSale {
+  id             String    @id @default(cuid())
+  outlet         String
+  company        String    @default("LBB")
+  invoiceNo      String
+  /// Tanggal penjualan zona WIB (YYYY-MM-DD)
+  saleDate       String
+  occurredAt     DateTime
+  amount         Float
+  paymentMethod  String?
+  qrisAmount     Float     @default(0)
+  orderType      String?
+  onlinePlatform String?
+  cashier        String?
+  /// Ringkasan item, mis. "Bakso Urat x2, Es Teh x1"
+  items          String?
+  /// Status asli di POS (completed, pending, canceled, ...)
+  posStatus      String?
+  /// COMPLETED | PENDING (belum dibayar, tidak masuk keuangan) | VOID
+  status         String    @default("COMPLETED")
+  voidedAt       DateTime?
+  voidReason     String?
+  /// PULL | PUSH (sumber terakhir yang memperbarui)
+  source         String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([outlet, invoiceNo])
+  @@index([outlet, saleDate])
+  @@index([saleDate])
+}
+
+model StockItem {
+  id          String        @id @default(cuid())
+  name        String
+  company     String
+  unit        String          @default("unit")
+  minQuantity Float           @default(0)
+  currentQty  Float           @default(0)
+  updatedAt   DateTime        @updatedAt
+  opnames     StockOpname[]
+
+  @@index([company])
+}
+
+model StockOpname {
+  id          String    @id @default(cuid())
+  stockItemId String
+  stockItem   StockItem @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+  countedQty  Float
+  countedBy   String
+  countedAt   DateTime  @default(now())
+  note        String?
+}
+
+model PayrollPosting {
+  id          String   @id @default(cuid())
+  year        Int
+  month       Int
+  company     String   @default("ALL")
+  totalAmount Float
+  employeeCount Int    @default(0)
+  /// Kas/Bank pembayaran gaji (kode COA)
+  cashAccount String?
+  /// Potong PPh 21 & BPJS karyawan dari gaji yang dibayarkan
+  withholding Boolean  @default(false)
+  /// JSON rincian komponen gaji untuk jurnal (lihat PayrollBreakdown)
+  breakdown   String?
+  postedBy    String
+  postedAt    DateTime @default(now())
+
+  @@unique([year, month, company])
+}
+
+model SyncLog {
+  id        String   @id @default(cuid())
+  type      String
+  status    String
+  message   String?
+  payload   String?
+  createdAt DateTime @default(now())
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  name        String
+  company     String
+  headNik     String?
+  description String?
+  createdAt   DateTime @default(now())
+  users       User[]
+
+  @@unique([name, company])
+  @@index([company])
+}
+
+model JobGrade {
+  id        String   @id @default(cuid())
+  title     String
+  grade     String
+  company   String?
+  minSalary Float?
+  maxSalary Float?
+  createdAt DateTime @default(now())
+  users     User[]
+
+  @@index([company])
+}
+
+model Recruitment {
+  id            String            @id @default(cuid())
+  position      String
+  company       String
+  status        RecruitmentStatus @default(OPEN)
+  applicantName String
+  email         String?
+  phone         String?
+  notes         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([status])
+  @@index([company])
+}
+
+model OnboardingTask {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [nik], onDelete: Cascade)
+  title       String
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model EmploymentContract {
+  id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [nik], onDelete: Cascade)
+  type      ContractType
+  startDate DateTime
+  endDate   DateTime?
+  status    String       @default("ACTIVE")
+  notes     String?
+  createdAt DateTime     @default(now())
+
+  @@index([userId])
+}
+
+model BusinessTrip {
+  id             String         @id @default(cuid())
+  userId         String
+  user           User           @relation(fields: [userId], references: [nik], onDelete: Cascade)
+  destination    String
+  startDate      DateTime
+  endDate        DateTime
+  purpose        String?
+  budget         Float?
+  approvalStatus ApprovalStatus @default(PENDING)
+  approvedBy     String?
+  approvedAt     DateTime?
+  createdAt      DateTime       @default(now())
+
+  @@index([userId])
+}
+
+model PerformanceReview {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [nik], onDelete: Cascade)
+  period      String
+  score       Float
+  kpiNotes    String?
+  reviewerNik String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, period])
+}
+
+model BpjsEnrollment {
+  id          String @id @default(cuid())
+  userId      String @unique
+  user        User   @relation(fields: [userId], references: [nik], onDelete: Cascade)
+  bpjsKes     String?
+  bpjsTk      String?
+  kesEmployer Float  @default(4)
+  kesEmployee Float  @default(1)
+  tkEmployer  Float  @default(3.7)
+  tkEmployee  Float  @default(2)
+}
+
+model Pph21Profile {
+  id         String @id @default(cuid())
+  userId     String @unique
+  user       User   @relation(fields: [userId], references: [nik], onDelete: Cascade)
+  npwp       String?
+  ptkpStatus String @default("TK/0")
+  dependents Int    @default(0)
+}
+
+model ExitRequest {
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [nik], onDelete: Cascade)
+  resignDate    DateTime
+  reason        String?
+  status        ExitStatus @default(PENDING)
+  clearanceNote String?
+  approvedBy    String?
+  approvedAt    DateTime?
+  createdAt     DateTime   @default(now())
+
+  @@index([userId])
+}
+
+model Task {
+  id           String     @id @default(cuid())
+  title        String
+  description  String?
+  company      String     @default("BCI")
+  status       TaskStatus @default(PROSES)
+  assigneeId   String?
+  assignee     User?      @relation("TaskAssignee", fields: [assigneeId], references: [nik])
+  attendanceId String?
+  attendance   Attendance? @relation(fields: [attendanceId], references: [id])
+  progressLogs TaskProgress[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([company])
+  @@index([assigneeId])
+}
+
+model TaskProgress {
+  id        String      @id @default(cuid())
+  taskId    String
+  task      Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User        @relation("TaskProgressAuthor", fields: [authorId], references: [nik])
+  note      String
+  status    TaskStatus?
+  createdAt DateTime    @default(now())
+
+  @@index([taskId])
+  @@index([authorId])
+}
+
+/// Catatan Minutes of Meeting (Modul Information)
+model MomNote {
+  id        String   @id @default(cuid())
+  title     String
+  content   String
+  meetingDate DateTime
+  createdBy String
+  creator   User     @relation(fields: [createdBy], references: [nik])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([meetingDate])
+  @@index([createdBy])
+}
+
+/// Poin penalti harian. Rupiah dihitung dari rate bulan, bukan per entri.
+model EmployeePenalty {
+  id           String    @id @default(cuid())
+  company      String
+  userId       String
+  user         User      @relation("PenaltyEmployee", fields: [userId], references: [nik])
+  date         DateTime
+  points       Int
+  note         String
+  createdByNik String
+  creator      User      @relation("PenaltyCreatedBy", fields: [createdByNik], references: [nik])
+  updatedByNik String?
+  updater      User?     @relation("PenaltyUpdatedBy", fields: [updatedByNik], references: [nik], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  @@index([userId, date])
+  @@index([company, date])
+}
+
+/// Rate rupiah per poin untuk satu perusahaan pada bulan kalender (YYYY-MM).
+model PenaltyPeriod {
+  id           String    @id @default(cuid())
+  company      String
+  period       String
+  ratePerPoint Float?
+  status       String    @default("open")
+  rateSetBy    String?
+  lockedBy     String?
+  rateSetAt    DateTime?
+  lockedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([company, period])
+  @@index([period])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actorName String?
+  action    String
+  entity    String
+  entityId  String?
+  details   String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entity])
+  @@index([actorId])
+}
+
+enum BillingCycle {
+  BULANAN
+  TAHUNAN
+}
+
+model DigitalAsset {
+  id          String       @id @default(cuid())
+  serviceName String
+  billingCycle BillingCycle
+  cost        Int
+  activeFrom  DateTime
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+enum AccountGroup {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum NormalBalance {
+  DEBIT
+  CREDIT
+}
+
+enum JournalSource {
+  MANUAL
+  OPENING
+  FUND_PAYMENT
+  FUND_REALIZATION
+  INCOME
+  POS_EXPENSE
+  PAYROLL
+  INVOICE
+  DEPRECIATION
+}
+
+/// Chart of Accounts
+model Account {
+  code          String        @id
+  name          String
+  group         AccountGroup
+  /// Akun induk: hanya pengelompokan, tidak bisa dijurnal
+  isHeader      Boolean       @default(false)
+  normalBalance NormalBalance
+  /// Kas & bank (dipakai di pilihan sumber/tujuan dana)
+  isCash        Boolean       @default(false)
+  active        Boolean       @default(true)
+  lines         JournalLine[]
+  budgets       Budget[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([group])
+}
+
+/// Pengaturan akuntansi (mis. lockDate = tutup buku s/d tanggal YYYY-MM-DD)
+model AccountingSetting {
+  key       String   @id
+  value     String
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+}
+
+/// Anggaran per akun per bulan per perusahaan
+model Budget {
+  id          String   @id @default(cuid())
+  year        Int
+  month       Int
+  company     String
+  accountCode String
+  account     Account  @relation(fields: [accountCode], references: [code])
+  amount      Float
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+
+  @@unique([year, month, company, accountCode])
+  @@index([year, company])
+}
+
+model JournalEntry {
+  id          String        @id @default(cuid())
+  number      String        @unique
+  date        DateTime
+  company     String
+  description String
+  source      JournalSource @default(MANUAL)
+  /// ID transaksi sumber (FundRequest, IncomeEntry, PosTransaction, PayrollPosting)
+  sourceId    String?
+  createdBy   String
+  lines       JournalLine[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([source, sourceId])
+  @@index([date])
+  @@index([company])
+}
+
+model JournalLine {
+  id          String       @id @default(cuid())
+  entryId     String
+  entry       JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  accountCode String
+  account     Account      @relation(fields: [accountCode], references: [code])
+  /// Salinan dari header untuk agregasi laporan
+  date        DateTime
+  company     String
+  debit       Float        @default(0)
+  credit      Float        @default(0)
+  memo        String?
+  sortOrder   Int          @default(0)
+
+  @@index([entryId])
+  @@index([accountCode, date])
+  @@index([company, date])
+}

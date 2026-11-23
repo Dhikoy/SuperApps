@@ -1,0 +1,206 @@
+================================================================================
+NOTES — SKEMA PRESENSI BCI GROUP
+SuperApps BCI
+================================================================================
+
+Dokumen ini merangkum aturan presensi dan payroll BCI Group yang diimplementasikan
+di sistem SuperApps.
+
+
+================================================================================
+1. PERIODE GAJI
+================================================================================
+
+  Cut-off     : tanggal 26 bulan sebelumnya s/d 25 bulan berjalan
+  Penutupan   : setiap tanggal 25 ke Departemen Keuangan
+  Kode        : src/lib/period.ts → getPeriodRange(year, month)
+
+  Contoh periode Juli 2026:
+    26 Juni 2026 — 25 Juli 2026
+
+
+================================================================================
+2. KEBIJAKAN PER PERUSAHAAN
+================================================================================
+
+--------------------------------------------------------------------------------
+2A. BCI (mode HOURLY)
+--------------------------------------------------------------------------------
+
+  Hari kerja              : Senin – Jumat
+  Libur                   : Kalender libur nasional Indonesia
+  Hari kerja standar      : 22 hari / bulan
+  Pembagi gaji            : 173 jam
+  Gaji pokok periode      : Penuh (asumsi memenuhi standar kehadiran)
+  Tarif per jam           : Gaji Pokok / 173
+  Lembur hari kerja       : Tarif x 1.5 x Jam Lembur
+  Lembur hari libur       : Tarif x 2.0 x Jam Lembur
+
+  Rumus:
+    Tarif Jam     = Gaji Pokok / 173
+    Lembur Kerja  = Tarif x 1.5 x Jam Lembur
+    Lembur Libur  = Tarif x 2.0 x Jam Lembur
+    Total Gaji    = Gaji Pokok + Total Lembur (yang sudah disetujui)
+
+--------------------------------------------------------------------------------
+2B. LBB (mode DAILY)
+--------------------------------------------------------------------------------
+
+  Hari kerja              : Senin – Minggu (shifting)
+  Hari kerja standar      : 26 hari / bulan
+  Pembagi gaji            : 26 hari
+  Gaji periode            : (Gaji Pokok / 26) x Hari Kerja Aktual
+  Lembur                  : Tidak berlaku
+
+  Rumus:
+    Tarif Harian  = Gaji Pokok / 26
+    Gaji Periode  = Tarif Harian x Hari Kerja Aktual
+    Hari Aktual   = HADIR + TERLAMBAT (dalam periode cut-off)
+
+
+--------------------------------------------------------------------------------
+2C. MKTECH, MNT, DPI (mode HOURLY — sama seperti BCI)
+--------------------------------------------------------------------------------
+
+  Hari kerja              : Senin – Jumat
+  Libur                   : Kalender libur nasional Indonesia
+  Hari kerja standar      : 22 hari / bulan
+  Pembagi gaji            : 173 jam
+  Lembur                  : x1.5 (hari kerja), x2.0 (libur nasional)
+
+  Catatan: Super Admin (Putu, Andhika / MKTECH) tetap muncul di payroll & absensi
+           untuk diproses HR/Keuangan, meski role sistemnya SUPER_ADMIN.
+
+  HADIR       : Dihitung hadir — clock in sampai 09:30 (toleransi 30 menit dari 09:00)
+  TERLAMBAT   : Dihitung hadir — clock in dari 09:31 ke atas
+  IZIN        : Tidak dihitung hadir — dari modul cuti (belum auto-sync)
+  ALPHA       : Tidak dihitung hadir — tidak ada clock in
+
+
+================================================================================
+4. ALUR PRESENSI HARIAN
+================================================================================
+
+  CLOCK IN
+    Halaman : /dashboard/presensi/clock-in
+    API     : POST /api/attendance/clock
+    Wajib   : Selfie, GPS (latitude/longitude)
+    Opsional: Pilih shift kerja
+
+  CLOCK OUT
+    Halaman : /dashboard/presensi/clock-in (bagian bawah)
+    API     : POST /api/attendance/clock-out
+    Syarat  : Sudah clock in hari ini
+
+  VALIDASI KETERLAMBATAN
+    Jam masuk standar  : 09:00
+    Jam pulang standar : 17:00
+    Toleransi terlambat: 30 menit (masuk sampai 09:30 masih HADIR)
+    Status TERLAMBAT   : clock in dari 09:31 ke atas
+    Tanpa pilih shift  : pakai default 09:00 + toleransi 30 menit
+    File               : src/lib/attendance-time.ts
+                         src/app/api/attendance/clock/route.ts
+
+
+================================================================================
+5. MODUL LEMBUR (BCI SAJA)
+================================================================================
+
+  1. Karyawan BCI ajukan lembur di /dashboard/payroll/lembur
+  2. API: POST /api/payroll/overtime
+  3. Sistem deteksi tipe otomatis:
+       - Tanggal libur nasional → HOLIDAY (pengali x2)
+       - Selain itu            → WEEKDAY (pengali x1.5)
+  4. HRD / Keuangan approve: PATCH /api/payroll/overtime/[id]
+  5. Hanya lembur berstatus APPROVED yang masuk perhitungan payroll
+
+
+================================================================================
+6. MODUL PAYROLL
+================================================================================
+
+  Halaman : /dashboard/payroll
+  API     : GET /api/payroll?year=&month=&company=
+  Akses   : Role KEUANGAN, HRD, SUPER_ADMIN
+
+  Setup gaji pokok karyawan:
+    1. Buka halaman Payroll
+    2. Form "Set Gaji Pokok" → pilih karyawan + nominal
+    3. API: POST /api/payroll/salary
+
+
+================================================================================
+7. STRUKTUR DATABASE
+================================================================================
+
+  PayrollPolicy   : Kebijakan BCI/LBB (divisor, mode, multiplier lembur)
+  UserSalary      : Gaji pokok per karyawan
+  PublicHoliday   : Kalender libur nasional
+  Overtime        : Pengajuan dan approval lembur
+  Attendance      : Presensi harian (termasuk clockOutTime)
+  WorkSchedule    : Shift / jadwal kerja
+
+
+================================================================================
+8. FILE IMPLEMENTASI
+================================================================================
+
+  src/lib/payroll-policy.ts              Konstanta kebijakan BCI & LBB
+  src/lib/payroll.ts                     Kalkulasi gaji & lembur
+  src/lib/holidays.ts                    Data libur nasional 2026
+  src/lib/period.ts                      Periode cut-off 26–25
+  src/app/api/payroll/route.ts           Hitung payroll per periode
+  src/app/api/payroll/overtime/route.ts  CRUD lembur
+  src/app/api/attendance/clock-out/route.ts  Clock out
+
+
+================================================================================
+9. PERMISSION (RBAC)
+================================================================================
+
+  payroll:view      → KEUANGAN, HRD, SUPER_ADMIN
+  payroll:manage    → KEUANGAN, HRD, SUPER_ADMIN
+  overtime:submit   → STAFF (BCI), KEUANGAN, HRD
+  attendance:clock  → STAFF
+
+
+================================================================================
+10. CONTOH PERHITUNGAN
+================================================================================
+
+  BCI — Gaji Rp 5.000.000, lembur 2 jam hari kerja (disetujui):
+    Tarif jam  = 5.000.000 / 173       = Rp 28.902
+    Lembur     = 28.902 x 1.5 x 2      = Rp 86.705
+    Total      = Rp 5.000.000 + 86.705  = Rp 5.086.705
+
+  LBB — Gaji Rp 4.000.000, hadir 24 hari:
+    Tarif harian = 4.000.000 / 26       = Rp 153.846
+    Gaji periode = 153.846 x 24         = Rp 3.692.308
+
+
+================================================================================
+11. YANG BELUM DIIMPLEMENTASIKAN
+================================================================================
+
+  - Auto-mark ALPHA untuk hari kerja tanpa clock in
+  - Sync status IZIN dari modul cuti ke presensi
+  - Potongan gaji karena TERLAMBAT (aturan belum ada di dokumen)
+  - Export PDF payroll
+  - Shift assignment per karyawan LBB (shifting per orang)
+  - Perusahaan MKTECH, MNT, DPI — kebijakan hourly (sama BCI), perlu karyawan STAFF
+
+
+================================================================================
+12. SEED & MIGRASI
+================================================================================
+
+  npm run db:migrate    Terapkan schema baru
+  npm run db:seed       Isi policy BCI/LBB, libur nasional, gaji sample
+
+  Setelah seed:
+    - Policy BCI & LBB terisi otomatis
+    - Libur nasional 2026 terisi
+    - Gaji pokok sample per perusahaan
+    - Sample lembur BCI (approved)
+
+================================================================================

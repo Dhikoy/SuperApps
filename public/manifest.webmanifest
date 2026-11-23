@@ -1,0 +1,21 @@
+{
+  "id": "/dashboard",
+  "name": "SuperApps BCI",
+  "short_name": "SuperApps",
+  "description": "Platform HR & operasional Brown Cinnamon Indonesia",
+  "lang": "id",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fdf6e8",
+  "theme_color": "#503200",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Clock In", "short_name": "Clock In", "url": "/dashboard/presensi/clock-in", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

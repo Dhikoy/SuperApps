@@ -1,0 +1,141 @@
+================================================================================
+NOTES — MODUL HR BCI GROUP
+SuperApps BCI
+================================================================================
+
+Pusat modul HR: /dashboard/hr
+Pusat modul Keuangan: /dashboard/keuangan
+
+Sidebar: Clock In, Dashboard, Modul HR, Modul Keuangan, Stock Opname,
+Aset, Task, Pengaturan — semua difilter per role.
+
+Stock Opname (/dashboard/stock-opname) — submenu terpisah, bukan di dalam modul:
+  KEUANGAN/ADMIN  → finance:view + finance:submit (bisa suggest pengajuan dana)
+  HRD/ADMIN       → stock:manage (input opname saja)
+
+
+================================================================================
+1. DAFTAR MODUL HR
+================================================================================
+
+  Dashboard HR          /dashboard/hr
+  Master Karyawan       /dashboard/karyawan          (sudah ada)
+  Struktur Organisasi   /dashboard/hr/organisasi
+  Jabatan & Grade       /dashboard/hr/jabatan
+  Divisi                /dashboard/hr/divisi
+  Rekrutmen             /dashboard/hr/rekrutmen
+  Onboarding            /dashboard/hr/onboarding
+  Kontrak Kerja         /dashboard/hr/kontrak
+  Presensi              /dashboard/presensi          (sudah ada)
+  Shift                 /dashboard/jadwal            (sudah ada)
+  Cuti                  /dashboard/cuti              (sudah ada)
+  Lembur                /dashboard/payroll/lembur    (sudah ada)
+  Perjalanan Dinas      /dashboard/hr/perjalanan
+  Penilaian KPI         /dashboard/hr/kpi
+  Payroll               → pindah ke Modul Keuangan (/dashboard/keuangan)
+  BPJS                  /dashboard/hr/bpjs
+  PPh 21                /dashboard/hr/pph21
+  Slip Gaji             /dashboard/hr/slip-gaji
+  Exit Management       /dashboard/hr/exit
+  Stock Opname (Admin)  → pindah ke submenu sidebar (/dashboard/stock-opname)
+
+
+================================================================================
+2. PERMISSION
+================================================================================
+
+  hr:view       → Lihat dashboard HR & modul read-only
+  hr:manage     → Kelola master data HR (divisi, jabatan, rekrutmen, dll)
+  stock:manage  → Input stock opname (khusus Admin, tanpa modul keuangan penuh)
+
+  Role:
+    HRD         → hr:view, hr:manage, stock:manage
+    ADMIN       → hr:view, hr:manage, stock:manage
+    SUPER_ADMIN → semua permission HR
+
+
+================================================================================
+3. STOCK OPNAME UNTUK ADMIN
+================================================================================
+
+  Admin dapat input stok opname via:
+    /dashboard/hr/stock-opname
+
+  Permission: stock:manage (bukan finance:view)
+
+  Keuangan tetap pakai:
+    /dashboard/keuangan/stock  (finance:view + finance:submit)
+
+  API sama: /api/finance/stock dan /api/finance/stock/opname
+  Mendukung stock:manage ATAU finance:submit
+
+
+================================================================================
+4. API HR
+================================================================================
+
+  GET/POST  /api/hr/organisasi       Hierarki & set atasan
+  GET/POST  /api/hr/departments      Divisi
+  GET/POST  /api/hr/job-grades       Jabatan & grade
+  GET/POST  /api/hr/recruitment      Rekrutmen
+  GET/POST  /api/hr/onboarding       Onboarding checklist
+  PATCH     /api/hr/onboarding       Centang task selesai
+  GET/POST  /api/hr/contracts        Kontrak kerja
+  GET/POST  /api/hr/business-trips   Perjalanan dinas
+  PATCH     /api/hr/business-trips   Approve SPPD
+  GET/POST  /api/hr/kpi              Penilaian kinerja
+  GET/POST  /api/hr/bpjs             BPJS enrollment
+  GET/POST  /api/hr/pph21            Profil PPh 21
+  GET/POST  /api/hr/exit             Exit management
+  PATCH     /api/hr/exit             Advance status exit
+
+
+================================================================================
+5. DATABASE (MODEL BARU)
+================================================================================
+
+  Department, JobGrade, Recruitment, OnboardingTask,
+  EmploymentContract, BusinessTrip, PerformanceReview,
+  BpjsEnrollment, Pph21Profile, ExitRequest
+
+  User diperluas: departmentId, jobGradeId
+
+
+================================================================================
+6. STATUS IMPLEMENTASI
+================================================================================
+
+  LENGKAP (operasional harian):
+    Presensi, Cuti, Shift, Lembur, Payroll, Master Karyawan
+
+  AKTIF (baru, CRUD dasar + workflow):
+    Dashboard HR, Organisasi (org chart + validasi siklus), Divisi, Jabatan,
+    Rekrutmen (HIRED → akun + wajib ganti password), Onboarding (progress %),
+    Kontrak (reminder expiry), Perjalanan Dinas (approve/tolak), KPI (periode + reviewer),
+    Exit (workflow clearance), Slip Gaji, Stock Opname Admin
+
+  INFRA (Sep 2026):
+    GET /api/health — monitoring publik
+    Rate limit nginx — deploy/nginx-superappsBCI.conf.example
+    PWA service worker — public/sw.js
+    Libur nasional 2026–2027 — src/lib/holidays.ts
+    PostgreSQL opsi — docs/POSTGRESQL.md + docker-compose.postgres.yml
+    Build produksi tanpa SKIP_TYPECHECK (typecheck aktif)
+
+  PARTIAL (estimasi/kalkulasi dasar):
+    BPJS — iuran % dari gaji pokok
+    PPh 21 — estimasi bulanan berdasarkan PTKP
+
+
+================================================================================
+7. MIGRASI & SEED
+================================================================================
+
+  npx prisma db push
+  npx prisma generate
+  npm run db:seed
+
+  Login HRD   : yeni / password123
+  Login Admin : nurcahyani / password123  (stock opname via Modul HR)
+
+================================================================================

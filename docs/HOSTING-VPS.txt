@@ -1,0 +1,198 @@
+================================================================================
+HOSTING superappsBCI DI VPS
+================================================================================
+
+Stack: Ubuntu/Debian + Node.js 20 + PM2 + Nginx + SQLite
+
+Rekomendasi VPS minimum:
+  - 1 vCPU, 2 GB RAM, 20 GB SSD
+  - Ubuntu 22.04 / Debian 12 (Hostinger KVM)
+  - Provider: Hostinger, DigitalOcean, Contabo, dll.
+
+
+================================================================================
+0. HOSTINGER — VPS BCI (contoh setup nyata)
+================================================================================
+
+  Panel   : Hostinger → VPS → Kelola
+  IP      : 31.97.187.110
+  OS      : Debian (KVM 4)
+  Hostname: srv1831081.hstgr.cloud
+
+  VPS ini sudah pernah dipakai untuk demo Quarkus (PLN). superappsBCI bisa
+  jalan BERSAMAAN — beda port & subdomain nginx.
+
+  Arsitektur multi-app:
+    demoquarkus (Java)   → port 8080  → demo.domain.com
+    superappsBCI (Next.js) → port 3000  → app.domain.com
+
+  SSH dari komputer:
+    ssh root@31.97.187.110
+    # atau via Hostinger → Kelola → Browser terminal
+
+  Cek apa yang sudah jalan di VPS:
+    pm2 list
+    systemctl list-units --type=service | grep -i quarkus
+    ss -tlnp | grep -E '3000|8080|80|443'
+    ls /var/www/
+
+  Jika Node.js belum terinstall (Debian):
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    apt install -y nodejs build-essential
+    npm install -g pm2
+
+  Deploy superappsBCI (folder terpisah dari demoquarkus):
+    mkdir -p /var/www/superappsBCI /var/lib/superappsBCI
+    cd /var/www/superappsBCI
+    git clone <REPO> .
+    cp .env.production.example .env && nano .env
+    npm install && npx prisma migrate deploy && npm run db:seed
+    npm run build
+    pm2 start deploy/ecosystem.config.cjs
+    pm2 save
+
+  Nginx — tambah site baru (jangan timpa config demoquarkus):
+    cp deploy/nginx-superappsBCI.conf.example /etc/nginx/sites-available/superappsBCI
+    nano /etc/nginx/sites-available/superappsBCI   # ganti app.domain.com
+    ln -s /etc/nginx/sites-available/superappsBCI /etc/nginx/sites-enabled/
+    nginx -t && systemctl reload nginx
+    certbot --nginx -d app.domain.com
+
+  DNS di Hostinger / domain panel:
+    A record  app  →  31.97.187.110
+    A record  demo →  31.97.187.110   (jika belum ada)
+
+
+================================================================================
+1. STRUKTUR FOLDER
+================================================================================
+
+  /var/www/superappsBCI/              ← kode aplikasi (git clone)
+  /var/lib/superappsBCI/              ← database SQLite + backup
+  /etc/nginx/sites-available/         ← config nginx
+
+  Database: /var/lib/superappsBCI/superappsBCI.db
+
+
+================================================================================
+2. SETUP VPS PERTAMA KALI (via SSH)
+================================================================================
+
+  ssh root@IP_VPS_ANDA
+
+  --- Jalankan script otomatis (disarankan) ---
+  bash deploy/setup-vps.sh
+
+  --- Atau manual step-by-step ---
+  apt update && apt upgrade -y
+  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+  apt install -y nodejs git nginx build-essential
+  npm install -g pm2
+  mkdir -p /var/www/superappsBCI /var/lib/superappsBCI
+
+
+================================================================================
+3. DEPLOY APLIKASI
+================================================================================
+
+  cd /var/www/superappsBCI
+  git clone https://github.com/ORG/SuperApps.git .
+
+  cp .env.production.example .env
+  nano .env
+
+  Isi .env:
+    NODE_ENV=production
+    JWT_SECRET=<openssl rand -base64 32>
+    DATABASE_URL=file:/var/lib/superappsBCI/superappsBCI.db
+    POS_WEBHOOK_API_KEY=<secret-production>
+
+  npm install
+  npx prisma migrate deploy
+  npm run db:seed          # sekali saja
+  npm run build
+
+  pm2 start deploy/ecosystem.config.cjs
+  pm2 save
+  pm2 startup
+
+
+================================================================================
+4. NGINX + SSL (HTTPS) — WAJIB UNTUK KAMERA CLOCK-IN
+================================================================================
+
+  Browser memblokir kamera di HTTP (kecuali localhost). Untuk clock-in selfie
+  live, superappsBCI harus diakses via HTTPS.
+
+  LANGKAH:
+
+  A. Siapkan domain (contoh: app.bcigroup.id)
+
+  B. DNS — di panel Hostinger / domain registrar:
+       Type   Name   Value            TTL
+       A      app    31.97.187.110    300
+
+     Cek propagasi (dari PC):
+       nslookup app.bcigroup.id
+
+  C. Upload kode terbaru ke VPS (jika belum), lalu SSH:
+
+       cd /var/www/superappsBCI
+       sed -i 's/\r$//' deploy/*.sh
+       bash deploy/setup-https.sh app.bcigroup.id admin@bcigroup.id
+
+     Ganti domain & email sesuai milik Anda.
+
+  D. Buka https://app.bcigroup.id/login
+
+  Script otomatis:
+    - Install nginx + certbot
+    - Proxy port 443 → Next.js port 3000
+    - Sertifikat Let's Encrypt (gratis, auto-renew)
+    - Set COOKIE_SECURE=true & APP_URL di .env
+    - Restart PM2
+
+  Manual (jika script gagal):
+    cp deploy/nginx-superappsBCI.conf.example /etc/nginx/sites-available/superappsBCI
+    nano /etc/nginx/sites-available/superappsBCI
+    ln -sf /etc/nginx/sites-available/superappsBCI /etc/nginx/sites-enabled/
+    nginx -t && systemctl reload nginx
+    certbot --nginx -d app.bcigroup.id
+
+  Multi-app (demoquarkus + superappsBCI):
+    - demoquarkus → demo.domain.com → port 8080
+    - superappsBCI → app.domain.com  → port 3000
+    Jangan timpa config nginx demoquarkus yang sudah ada.
+
+
+================================================================================
+5. UPDATE / RE-DEPLOY
+================================================================================
+
+  cd /var/www/superappsBCI
+  bash deploy/deploy.sh
+
+  # atau manual:
+  git pull && npm install && npx prisma migrate deploy && npm run build
+  pm2 restart superappsBCI
+
+
+================================================================================
+6. BACKUP DATABASE
+================================================================================
+
+  cp /var/lib/superappsBCI/superappsBCI.db /var/lib/superappsBCI/backup-$(date +%F).db
+
+  Cron harian:
+  0 2 * * * cp /var/lib/superappsBCI/superappsBCI.db /var/lib/superappsBCI/backup-$(date +\%F).db
+
+
+================================================================================
+7. PERINTAH BERGUNA
+================================================================================
+
+  pm2 status
+  pm2 logs superappsBCI
+  pm2 restart superappsBCI
+
+================================================================================

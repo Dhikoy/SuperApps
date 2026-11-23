@@ -1,0 +1,198 @@
+================================================================================
+HOSTING superappsBCI DI CPANEL
+================================================================================
+
+Stack: Next.js 16 + Node.js + Prisma + SQLite (better-sqlite3)
+
+PENTING: Hosting static/PHP saja TIDAK cukup. Paket cPanel harus punya fitur
+"Setup Node.js App" (Node.js Selector). Jika tidak ada, minta upgrade ke
+hosting Node.js atau VPS.
+
+
+================================================================================
+1. SYARAT HOSTING
+================================================================================
+
+  - Node.js 20.x atau 22.x (minimum 18)
+  - RAM minimal 1 GB (build Next.js butuh memori)
+  - SSH / Terminal cPanel (sangat disarankan)
+  - Domain atau subdomain (mis. app.domainanda.com)
+  - SSL/HTTPS aktif (Let's Encrypt di cPanel)
+
+
+================================================================================
+2. STRUKTUR FOLDER DI SERVER
+================================================================================
+
+  /home/USERNAME/superappsBCI/          ← root aplikasi (Node.js App root)
+  /home/USERNAME/data/superappsBCI.db   ← database SQLite (di luar public, writable)
+
+  Jangan taruh database di public_html.
+
+
+================================================================================
+3. UPLOAD KODE
+================================================================================
+
+  Opsi A — Git (disarankan):
+    1. cPanel → Git Version Control → Clone repo ke ~/superappsBCI
+    2. Branch: main
+
+  Opsi B — ZIP:
+    1. Di komputer lokal, zip project TANPA:
+       - node_modules/
+       - .next/
+       - dev.db / prisma/dev.db
+    2. Upload ke ~/superappsBCI via File Manager
+    3. Extract
+
+  File .env JANGAN di-commit. Set lewat cPanel Environment Variables.
+
+
+================================================================================
+4. BUAT NODE.JS APP DI CPANEL
+================================================================================
+
+  cPanel → Software → Setup Node.js App → Create Application
+
+    Node.js version     : 20.x atau 22.x
+    Application mode    : Production
+    Application root    : superappsBCI
+    Application URL     : domain/subdomain Anda
+    Application startup : npm start   (atau lihat bagian 7)
+
+  Klik "Create".
+
+
+================================================================================
+5. ENVIRONMENT VARIABLES (wajib)
+================================================================================
+
+  Di halaman Node.js App → Environment Variables, tambahkan:
+
+    NODE_ENV=production
+    JWT_SECRET=<random-panjang-min-32-karakter>
+    DATABASE_URL=file:/home/USERNAME/data/superappsBCI.db
+    POS_WEBHOOK_API_KEY=<secret-production>
+    GOOGLE_SYNC_WEBHOOK_URL=<opsional>
+
+  Ganti USERNAME dengan username cPanel Anda.
+  JWT_SECRET jangan pakai nilai dev!
+
+  Buat folder data:
+    mkdir -p ~/data
+    chmod 755 ~/data
+
+
+================================================================================
+6. INSTALL & BUILD (via Terminal cPanel / SSH)
+================================================================================
+
+  cd ~/superappsBCI
+
+  # Masuk virtual env Node cPanel (jika diminta, ikuti perintah di UI Node.js App)
+  source /home/USERNAME/nodevenv/superappsBCI/20/bin/activate
+
+  npm install
+  npx prisma migrate deploy
+  npm run db:seed          # sekali saja, untuk data awal
+  npm run build
+
+  Jika build gagal karena RAM kecil:
+    export NODE_OPTIONS=--max-old-space-size=512
+    npm run build
+
+
+================================================================================
+7. START APPLICATION
+================================================================================
+
+  Di cPanel Node.js App:
+
+    Application startup file : npm
+    Arguments (jika ada)     : start
+
+  Atau custom server.js (opsional) — lihat server.js.example di repo.
+
+  Port di-set otomatis oleh cPanel. Next.js membaca process.env.PORT.
+
+  Setelah deploy, klik "Restart" di Node.js App.
+
+
+================================================================================
+8. DATABASE SQLITE DI PRODUCTION
+================================================================================
+
+  - Path DATABASE_URL harus absolute: file:/home/USERNAME/data/superappsBCI.db
+  - Folder ~/data harus writable oleh user Node
+  - Backup rutin: copy file superappsBCI.db (File Manager atau cron)
+
+  better-sqlite3 = native module. Harus di-compile di server saat npm install.
+  Jika error "Could not locate the bindings file":
+    npm rebuild better-sqlite3
+
+  Jika hosting shared tidak support compile native module → pertimbangkan VPS
+  atau migrasi ke MySQL (butuh perubahan schema).
+
+
+================================================================================
+9. SETELAH ONLINE — CEK
+================================================================================
+
+  [ ] https://domain-anda.com/login terbuka
+  [ ] Login: yeni / password123 (ganti password setelah go-live!)
+  [ ] Clock in + presensi jalan
+  [ ] Upload/write database OK (tidak error 500)
+
+  Ganti semua password default setelah production!
+
+
+================================================================================
+10. UPDATE APLIKASI (re-deploy)
+================================================================================
+
+  cd ~/superappsBCI
+  git pull                  # atau upload file baru
+  npm install
+  npx prisma migrate deploy
+  npm run build
+  # Restart Node.js App di cPanel
+
+
+================================================================================
+11. MASALAH UMUM
+================================================================================
+
+  Error 503 / app tidak jalan
+    → Cek log di cPanel Node.js App
+    → Pastikan npm run build sukses
+    → Restart application
+
+  Error database / readonly
+    → Cek path DATABASE_URL & permission folder ~/data
+
+  Build OOM (out of memory)
+    → NODE_OPTIONS=--max-old-space-size=512
+    → Upgrade RAM atau build di lokal lalu upload folder .next (kurang ideal)
+
+  Module better-sqlite3 gagal
+    → npm rebuild better-sqlite3
+    → Pastikan Node version sama antara build & runtime
+
+  Middleware deprecated warning
+    → Aman diabaikan sementara; tidak blok deploy
+
+
+================================================================================
+12. ALTERNATIF JIKA CPANEL SHARED SUSAH
+================================================================================
+
+  - VPS (DigitalOcean, Contabo, dll) + Node 20 + PM2 + Nginx
+  - Railway / Render / Vercel (perlu migrasi DB ke PostgreSQL untuk Vercel)
+
+  Untuk production BCI Group jangka panjang, VPS + backup DB lebih stabil
+  daripada shared hosting dengan SQLite.
+
+  Lihat panduan VPS lengkap: docs/HOSTING-VPS.txt
+
+================================================================================

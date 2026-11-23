@@ -1,0 +1,74 @@
+# Nginx reverse proxy untuk superappsBCI (Next.js di port 3000)
+#
+# Setup HTTPS otomatis:
+#   bash deploy/setup-https.sh app.domainanda.com admin@domainanda.com
+#
+# Manual:
+#   cp deploy/nginx-superappsBCI.conf.example /etc/nginx/sites-available/superappsBCI
+#   sed -i 's/app.domainanda.com/DOMAIN_ANDA/g' /etc/nginx/sites-available/superappsBCI
+#   ln -sf /etc/nginx/sites-available/superappsBCI /etc/nginx/sites-enabled/
+#   nginx -t && systemctl reload nginx
+#   certbot --nginx -d DOMAIN_ANDA
+#
+# Di belakang Cloudflare: bash deploy/setup-cloudflare-realip.sh
+
+# Rate limit login & API abuse (persisten di nginx, survive app restart)
+limit_req_zone $binary_remote_addr zone=login_limit:10m rate=20r/m;
+limit_req_zone $binary_remote_addr zone=api_limit:10m rate=120r/m;
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name app.domainanda.com;
+
+    # Upload selfie clock-in (base64 ~1-2 MB)
+    client_max_body_size 10M;
+
+    location /api/auth/login {
+        limit_req zone=login_limit burst=5 nodelay;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /api/health {
+        access_log off;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
+
+    location /api/ {
+        limit_req zone=api_limit burst=40 nodelay;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+    }
+}

@@ -1,0 +1,259 @@
+================================================================================
+NOTES — MODUL KEUANGAN BCI GROUP (FASE 1–4 + INTEGRASI HR)
+SuperApps BCI
+================================================================================
+
+Dokumen ini merangkum skema keuangan terintegrasi HR + POS + Stock Opname +
+Google Workspace yang diimplementasikan di Fase 1–4.
+
+Pusat modul: /dashboard/keuangan
+Sidebar: Modul Keuangan + Stock Opname (terpisah). Sub-menu di dalam hub
+difilter per role (payroll saja untuk HRD, full finance untuk Keuangan, dll).
+
+
+================================================================================
+1. GAMBARAN ARSITEKTUR
+================================================================================
+
+  HR (sudah ada)     → Master karyawan, presensi, payroll, posting gaji
+  POS LBB (Fase 2)   → Penjualan, pengeluaran, laba POS
+  Keuangan (Fase 1)  → Pengajuan dana, pendapatan, cash flow
+  Stock (Fase 3)     → Opname stok, auto-suggest pengajuan dana
+  Google (Fase 4)    → Sync cash flow ke Apps Script, export PDF
+
+  Model bisnis: BUKAN free cash flow (FCF).
+  Alur: Pengajuan dana dulu → Approve → Bayar → Realisasi.
+
+
+================================================================================
+2. WORKFLOW PENGAJUAN DANA
+================================================================================
+
+  Tahap 1 — Admin Keuangan buat pengajuan
+            Halaman: /dashboard/keuangan/pengajuan/baru
+            API: POST /api/finance/requests
+            Status: PENDING
+
+  Tahap 2 — Direksi approve / tolak
+            Halaman: /dashboard/keuangan/persetujuan
+            API: PATCH /api/finance/requests/[id]  action=approve|reject
+            Status: APPROVED atau REJECTED
+
+  Tahap 3 — Eksekutor pembayaran cairkan dana
+            Halaman: /dashboard/keuangan/pembayaran
+            API: PATCH /api/finance/requests/[id]  action=pay
+            Status: PAID
+
+  Tahap 4 — Admin Keuangan realisasi
+            Halaman: /dashboard/keuangan/realisasi
+            API: PATCH /api/finance/requests/[id]  action=realize
+            Status: REALIZED → masuk pengeluaran cash flow
+
+  Ringkas:
+    Admin Keuangan → Direksi → Bayar → Realisasi (Admin Keuangan)
+
+
+================================================================================
+3. FORM PENDAPATAN
+================================================================================
+
+  Halaman : /dashboard/keuangan/pendapatan
+  API     : POST /api/finance/income
+
+  Sumber pendapatan (enum IncomeSource):
+    MANUAL         — input manual oleh keuangan
+    POS            — otomatis dari import POS LBB (Fase 2)
+    FUND_REALIZED  — reserved untuk integrasi lanjutan
+
+
+================================================================================
+4. LAPORAN CASH FLOW
+================================================================================
+
+  Halaman : /dashboard/keuangan/cashflow
+  API     : GET /api/finance/cashflow?year=&month=&company=
+  Export  : GET /api/finance/cashflow?format=pdf (unduh PDF)
+
+  Periode : cut-off 26 s/d 25 (sama dengan presensi/payroll)
+
+  Rumus:
+    Total Pendapatan  = Σ IncomeEntry dalam periode
+    Total Pengeluaran = Σ FundRequest REALIZED + PayrollPosting dalam periode
+    Net Cash Flow     = Pendapatan - Pengeluaran
+    Laba POS          = Σ PosTransaction SALE - Σ PosTransaction EXPENSE
+
+  Breakdown:
+    Pendapatan per sumber (MANUAL, POS, ...)
+    Pengeluaran per kategori (OPERASIONAL, PAYROLL, ...)
+
+
+================================================================================
+5. FASE 2 — INTEGRASI POS LBB
+================================================================================
+
+  Halaman : /dashboard/keuangan/pos
+  API     : GET/POST /api/integrations/pos
+  Webhook : POST /api/integrations/pos/webhook  (public, butuh API key)
+
+  Env:
+    POS_WEBHOOK_API_KEY=your-secret-key
+
+  Webhook header: x-pos-api-key = POS_WEBHOOK_API_KEY
+
+  Body contoh:
+    {
+      "company": "LBB",
+      "type": "SALE",
+      "amount": 2200000,
+      "description": "Penjualan harian",
+      "transactionDate": "2026-07-03",
+      "externalRef": "POS-SALE-001"
+    }
+
+  Perilaku:
+    - Transaksi SALE → otomatis buat IncomeEntry source=POS
+    - Transaksi EXPENSE → masuk hitungan laba POS (cashflow.posProfit)
+    - externalRef dicegah duplikat
+
+
+================================================================================
+6. FASE 3 — STOCK OPNAME
+================================================================================
+
+  Halaman : /dashboard/keuangan/stock
+  API     : GET/POST /api/finance/stock
+  Opname  : POST /api/finance/stock/opname
+  Suggest : PATCH /api/finance/stock/opname  (buat draft pengajuan dana)
+
+  Alur:
+    1. Tambah item stok (nama, PT, satuan, min qty, stok awal)
+    2. Input opname fisik → update currentQty
+    3. Jika currentQty < minQuantity → alert stok kurang
+    4. Isi harga satuan → "Buat pengajuan dana" → draft FundRequest PENDING
+
+  Contoh seed: Galon air minum 19L BCI — min 3, stok 1
+
+
+================================================================================
+7. FASE 4 — GOOGLE WORKSPACE SYNC
+================================================================================
+
+  Halaman : /dashboard/keuangan/sync
+  API     : POST /api/integrations/google/sync
+
+  Env:
+    GOOGLE_SYNC_WEBHOOK_URL=https://script.google.com/macros/s/.../exec
+
+  Perilaku:
+    - Kirim ringkasan cash flow periode ke Google Apps Script
+    - Log hasil di tabel SyncLog
+    - PDF cash flow: unduh dari halaman Cash Flow (format=pdf)
+
+
+================================================================================
+8. INTEGRASI HR → KEUANGAN (PAYROLL POSTING)
+================================================================================
+
+  Halaman : /dashboard/payroll  → tombol "Posting ke Keuangan"
+  API     : POST /api/payroll/post
+
+  Body: { year, month, company? }
+
+  Perilaku:
+    - Hitung payroll periode (26→25) per PT
+    - Buat PayrollPosting per perusahaan
+    - Masuk pengeluaran cash flow kategori PAYROLL
+    - Dicegah duplikat posting per periode+PT
+
+
+================================================================================
+9. STRUKTUR DATABASE
+================================================================================
+
+  FundRequest      — Header pengajuan dana
+  FundRequestItem  — Rincian barang (nama, qty, harga)
+  IncomeEntry      — Catatan pendapatan
+  PosTransaction   — Transaksi POS (SALE / EXPENSE)
+  StockItem        — Master barang stok per PT
+  StockOpname      — Riwayat opname fisik
+  PayrollPosting   — Posting gaji HR ke keuangan
+  SyncLog          — Log sync Google
+
+  Status FundRequest:
+    PENDING → APPROVED → PAID → REALIZED | REJECTED
+
+
+================================================================================
+10. PERMISSION (RBAC)
+================================================================================
+
+  finance:view     → Lihat modul keuangan, cash flow, POS, stock, sync
+  finance:submit   → Buat pengajuan & input pendapatan
+  finance:approve  → Direksi approve/tolak
+  finance:pay      → Eksekusi pembayaran
+  finance:realize  → Tutup realisasi
+
+  Role:
+    KEUANGAN    → submit, pay, realize, view
+    ADMIN       → semua finance + payroll
+    DIREKSI     → approve, view
+    SUPER_ADMIN → semua permission
+
+
+================================================================================
+11. FILE IMPLEMENTASI
+================================================================================
+
+  src/lib/finance-workflow.ts
+  src/lib/finance.ts
+  src/lib/pos.ts
+  src/lib/stock.ts
+  src/lib/google-sync.ts
+  src/lib/payroll-finance.ts
+
+  src/app/api/finance/requests/
+  src/app/api/finance/income/
+  src/app/api/finance/cashflow/
+  src/app/api/finance/stock/
+  src/app/api/integrations/pos/
+  src/app/api/integrations/google/sync/
+  src/app/api/payroll/post/
+
+  src/app/dashboard/keuangan/
+    pengajuan, persetujuan, pembayaran, realisasi, pendapatan,
+    cashflow, pos, stock, sync
+
+
+================================================================================
+12. CONTOH PENGGUNAAN (SEED)
+================================================================================
+
+  Login Keuangan : muhaemin / password123
+  Login Direksi  : anandita / password123 (approve)
+  Login HRD      : yeni / password123 (payroll posting)
+
+  Sample data setelah seed:
+    - Pengajuan PENDING: galon air minum BCI (3 galon)
+    - Pengajuan REALIZED: ATK LBB Rp 250.000
+    - Pendapatan MANUAL: penjualan LBB Rp 1.500.000
+    - POS LBB: SALE Rp 2.200.000 + EXPENSE Rp 350.000
+    - IncomeEntry POS: Rp 2.200.000
+    - Stock: galon air BCI min 3, stok 1 (alert kurang)
+
+
+================================================================================
+13. ENV & MIGRASI
+================================================================================
+
+  Tambahkan di .env (opsional, untuk integrasi eksternal):
+
+    POS_WEBHOOK_API_KEY=your-secret-key
+    GOOGLE_SYNC_WEBHOOK_URL=https://script.google.com/macros/s/.../exec
+
+  Migrasi & seed:
+
+    npx prisma db push
+    npx prisma generate
+    npm run db:seed
+
+================================================================================

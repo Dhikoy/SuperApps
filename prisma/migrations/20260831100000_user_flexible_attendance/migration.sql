@@ -1,0 +1,1 @@
+ALTER TABLE "User" ADD COLUMN "flexibleAttendance" BOOLEAN NOT NULL DEFAULT false;

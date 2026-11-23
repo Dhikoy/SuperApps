@@ -1,0 +1,1 @@
+-- SQLite menyimpan role sebagai TEXT; nilai LEAD valid setelah update aplikasi.
